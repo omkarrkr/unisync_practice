@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>UniSync - College Platform</title>
 
   <!-- React + Babel + Tailwind -->
@@ -11,182 +11,190 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 
+  <!-- GSAP + InertiaPlugin -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+  <script src="https://assets.codepen.io/16327/InertiaPlugin.min.js"></script>
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
       margin: 0;
       padding: 0;
-      background-image: url('./NEUMORPHIC_CIRCLES_BACKGROUND.jpg');
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      background-attachment: fixed;
-      width: 100%;
+      background: #0F0F17;
+      overflow-x: hidden;
     }
-
-    @keyframes gradientMove {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
-    /* Custom Gradientss */
-    .card-gradient-blue { background: linear-gradient(145deg, #3B82F6 0%, #06B6D4 100%); }
-    .card-gradient-green { background: linear-gradient(145deg, #10B981 0%, #34D399 100%); }
-    .card-gradient-purple { background: linear-gradient(145deg, #8B5CF6 0%, #EC4899 100%); }
-    .card-gradient-indigo { background: linear-gradient(145deg, #6366F1 0%, #3B82F6 100%); }
-    .card-gradient-orange { background: linear-gradient(145deg, #F59E0B 0%, #FDE047 100%); }
-    .card-gradient-rose { background: linear-gradient(145deg, #F43F5E 0%, #EC4899 100%); }
-    .card-gradient-violet { background: linear-gradient(145deg, #8B5CF6 0%, #A855F7 100%); }
-
-    /* === Premium Glassy Look === */
-
-    /* Main glass container */
-
-    /* Feature cards with frosted glass effect */
+    .font-logo { font-family: 'Dancing Script', cursive; }
     .feature-card {
-      background: rgba(255, 255, 255, 0.15);
-      backdrop-filter: blur(18px) saturate(180%);
-      -webkit-backdrop-filter: blur(18px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      border-radius: 20px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-      transition: all 0.3s ease-in-out;
+      background: rgba(255,255,255,0.12);
+      backdrop-filter: blur(12px);
+      border-radius: 16px;
+      transition: 0.25s;
+      border: 1px solid rgba(255,255,255,0.06);
     }
-
-    .feature-card:hover {
-      transform: translateY(-6px) scale(1.03);
-      background: rgba(255, 255, 255, 0.25);
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35), 0 0 25px rgba(140, 82, 255, 0.4);
-      border-color: rgba(255, 255, 255, 0.4);
-    }
-
+    .feature-card:hover { transform: translateY(-6px) scale(1.03); background: rgba(255,255,255,0.18); }
+    .dot-grid { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .app-foreground { position: relative; z-index: 1; }
+    .fade-in { opacity: 0; transform: translateY(30px); transition: opacity 1s ease, transform 1s ease;}
+    .fade-in.show { opacity: 1; transform: translateY(0); }
   </style>
 </head>
-
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState } = React;
+    const { useRef, useEffect, useCallback, useMemo } = React;
 
+    // safe plugin register
+    try { if (window.gsap && window.InertiaPlugin) gsap.registerPlugin(InertiaPlugin); } catch(e){ console.warn('GSAP plugin register failed', e); }
+
+    // small throttle
+    const throttle = (fn, limit) => { let last=0; return (...a)=>{ const now=performance.now(); if(now-last>=limit){ last=now; fn(...a);} }; };
+
+    function hexToRgb(hex){ const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i); return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:0,g:0,b:0}; }
+
+    function DotGrid({ dotSize=6, gap=10, baseColor="#7448FF", activeColor="#B38AFF", proximity=90 }){
+      const wrap = useRef(), canvas = useRef(), dots = useRef([]);
+      const pointer = useRef({x:0,y:0,lastX:0,lastY:0,lastTime:0});
+
+      const base = useMemo(()=>hexToRgb(baseColor),[baseColor]);
+      const active = useMemo(()=>hexToRgb(activeColor),[activeColor]);
+      const circle = useMemo(()=>{ const p=new Path2D(); p.arc(0,0,dotSize/2,0,Math.PI*2); return p; },[dotSize]);
+
+      const build = useCallback(()=>{
+        const w = wrap.current.clientWidth, h = wrap.current.clientHeight;
+        const dpr = devicePixelRatio || 1;
+        const c = canvas.current;
+        c.width = w*dpr; c.height = h*dpr;
+        c.style.width = w + 'px'; c.style.height = h + 'px';
+        const ctx = c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+
+        const cols = Math.floor((w + gap) / (dotSize + gap));
+        const rows = Math.floor((h + gap) / (dotSize + gap));
+        const cell = dotSize + gap;
+        const sx = (w - (cell*cols - gap))/2 + dotSize/2;
+        const sy = (h - (cell*rows - gap))/2 + dotSize/2;
+
+        dots.current = Array.from({length: rows*cols}, (_,i)=>{
+          const x = i%cols, y = (i/cols)|0;
+          return { cx: sx + x*cell, cy: sy + y*cell, xOffset:0, yOffset:0 };
+        });
+      },[dotSize,gap]);
+
+      useEffect(()=>{ build(); const ro = new ResizeObserver(build); if(wrap.current) ro.observe(wrap.current); return ()=>ro.disconnect();},[build]);
+
+      useEffect(()=>{
+        let raf;
+        const draw = ()=>{
+          const c = canvas.current, ctx = c.getContext('2d');
+          ctx.clearRect(0,0,c.width,c.height);
+          const { x:px, y:py } = pointer.current;
+          for(const d of dots.current){
+            const ox = d.cx + d.xOffset, oy = d.cy + d.yOffset;
+            const dx = d.cx - px, dy = d.cy - py, dist2 = dx*dx + dy*dy;
+            let col = baseColor;
+            if(dist2 <= proximity*proximity){
+              const t = 1 - Math.sqrt(dist2)/proximity;
+              col = `rgb(${base.r + (active.r-base.r)*t},${base.g + (active.g-base.g)*t},${base.b + (active.b-base.b)*t})`;
+            }
+            ctx.save(); ctx.translate(ox,oy); ctx.fillStyle = col; ctx.fill(circle); ctx.restore();
+          }
+          raf = requestAnimationFrame(draw);
+        };
+        draw(); return ()=>cancelAnimationFrame(raf);
+      },[proximity,base,active,circle]);
+
+      useEffect(()=>{
+        const rect = ()=> canvas.current.getBoundingClientRect();
+        const move = (e)=>{
+          const r = rect();
+          pointer.current.x = e.clientX - r.left;
+          pointer.current.y = e.clientY - r.top;
+        };
+        const m = throttle(move, 50);
+        window.addEventListener('mousemove', m, { passive: true });
+        return ()=> window.removeEventListener('mousemove', m);
+      },[]);
+
+      return <section className="dot-grid" ref={wrap}><canvas ref={canvas} className="dot-grid__canvas" /></section>;
+    }
+
+    // === UniSync App ===
     const FeatureCard = ({ id, label, icon, url, onClick }) => (
-      <a
-        href={url}
-        className="feature-card block p-6 rounded-2xl text-white cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
-        onClick={(e) => {
-          e.preventDefault();
-          onClick(id, url);
-        }}
-      >
+      <a href={url} className="feature-card block p-6 rounded-2xl text-white" onClick={e=>{e.preventDefault(); onClick(id,url);}}>
         <div className="flex items-center space-x-4">
-          <div className="text-4xl p-3 bg-white/20 backdrop-blur-sm rounded-lg">
-            {icon}
-          </div>
-          <h2 className="text-xl font-semibold tracking-wide">{label}</h2>
+          <div className="text-4xl p-3 bg-white/20 backdrop-blur-sm rounded-lg">{icon}</div>
+          <h2 className="text-xl font-semibold">{label}</h2>
         </div>
       </a>
     );
 
-    const UniSync = () => {
-      const [clickedId, setClickedId] = useState(null);
+    function UniSync(){
+      const [showGame, setShowGame] = React.useState(false);
+      const gameRef = React.useRef(null);
 
+      React.useEffect(()=>{
+        const obs = new IntersectionObserver(entries=>{
+          entries.forEach(en=>{
+            if(en.isIntersecting){ setShowGame(true); obs.disconnect(); }
+          });
+        }, { threshold: 0.3 });
+        if(gameRef.current) obs.observe(gameRef.current);
+        return ()=> obs.disconnect();
+      },[]);
+
+      const go = (id,url) => setTimeout(()=> location.href = url, 250);
       const features = [
-        { id: 'notes', label: 'Notes Sharing', icon: '📝', url: 'notes.html' },
-        { id: 'groups', label: 'Study Groups', icon: '👥', url: 'groups.html' },
-        { id: 'events', label: 'University Events', icon: '📅', url: 'events.html' },
-        { id: 'messages', label: 'Messages / Chat', icon: '💌', url: 'messages.html' },
-        { id: 'marketplace', label: 'Marketplace', icon: '🛒', url: 'marketplace.html' },
-        { id: 'forum', label: 'Q&A Forum', icon: '💬', url: 'forum.html' },
-        { id: 'dashboard', label: 'Personal Dashboard', icon: '📊', url: 'dashboard.html' }
+        {id:'notes',label:'Notes Sharing',icon:'📝',url:'notes.html'},
+        {id:'groups',label:'Study Groups',icon:'👥',url:'groups.html'},
+        {id:'events',label:'University Events',icon:'📅',url:'events.html'},
+        {id:'messages',label:'Messages / Chat',icon:'💌',url:'messages.html'},
+        {id:'marketplace',label:'Marketplace',icon:'🛒',url:'marketplace.html'},
+        {id:'forum',label:'Q&A Forum',icon:'💬',url:'forum.html'},
+        {id:'dashboard',label:'Personal Dashboard',icon:'📊',url:'dashboard.html'},
       ];
 
-      const handleCardClick = (id, url) => {
-        setClickedId(id);
-        setTimeout(() => {
-          window.location.href = url;
-        }, 300);
-      };
-
       return (
-        <div className="min-h-screen bg-black/40 backdrop-blur-sm">
-          {/* Header */}
-          <header className="backdrop-blur-lg bg-gradient-to-r from-gray-900/70 via-gray-800/50 to-gray-900/70 shadow-lg sticky top-0 z-50 border-b border-white/10 bg-[length:200%_200%] animate-[gradientMove_8s_ease_infinite]">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center h-20">
-                <a href="#" className="flex items-center gap-3">
-                  <div className="w-14 h-14 bg-gradient-to-tr from-indigo-500 via-blue-500 to-cyan-400 rounded-2xl flex items-center justify-center text-white font-extrabold text-3xl shadow-[4px_4px_10px_rgba(0,0,0,0.3)] hover:translate-y-1 transition-transform">
-                    U
-                  </div>
-                  <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-400 drop-shadow-[0_0_6px_rgba(138,43,226,0.4)]">
-                    UniSync
-                  </h1>
-                </a>
-                <div className="flex items-center space-x-4">
-                  <button className="text-gray-300 hover:text-purple-400 transition duration-150 p-2 rounded-full hover:bg-gray-700/30" aria-label="Notifications">
-                    <span className="text-2xl">🔔</span>
-                  </button>
-                  <button className="w-10 h-10 rounded-full bg-gray-200 text-gray-700 font-semibold flex items-center justify-center hover:bg-gray-300 transition duration-150" aria-label="User Profile">
-                    P
-                  </button>
-                </div>
-              </div>
+        <div className="app-foreground min-h-screen bg-black/40 backdrop-blur-sm">
+          <header className="backdrop-blur-lg bg-gradient-to-r from-gray-900/70 via-gray-800/50 to-gray-900/70 border-b border-white/10 sticky top-0 z-50">
+            <div className="max-w-7xl mx-auto px-6 flex justify-between items-center h-20">
+              <a className="flex items-center gap-3" href="#">
+                <img src="./u_logo-removebg-preview.png" alt="UniSync Logo" className="w-14 h-14 object-contain rounded-2xl shadow-lg p-1 bg-white" />
+
+                <h1 className="text-5xl font-logo text-white drop-shadow-lg">UniSync</h1>
+              </a>
+              <div className="flex gap-3"><span className="text-2xl">🔔</span><div className="w-10 h-10 bg-gray-200 rounded-full flex justify-center items-center">P</div></div>
             </div>
           </header>
 
-          {/* Main Content */}
-          <main className="main-container py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
-            <h1 className="text-5xl font-extrabold text-white mb-3 drop-shadow-md">
-              Your Synchronized University Experience
-            </h1>
-            <p className="text-xl text-white mb-10">
-              Hello, Piyush! Choose your adventure and connect with your college community.
-            </p>
+          <main className="py-16 px-6 max-w-7xl mx-auto text-center">
+            <h1 className="text-5xl font-bold text-white mb-4">Your Effortless University Experience</h1>
+            <p className="text-lg text-gray-200 mb-10">Hello Piyush 👋 — dive into your campus digital hub.</p>
 
-            {/* Features Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {features.map(feature => (
-                <FeatureCard key={feature.id} {...feature} onClick={handleCardClick} />
-              ))}
+              {features.map(f => <FeatureCard key={f.id} {...f} onClick={go} />)}
             </div>
 
-            {/* Embedded Slow Roads */}
-            <div className="mt-20 text-center">
-              <h2 className="text-3xl font-bold mb-4 text-white">
-                Take a Break !!! Play Slow Roads 🚗
-              </h2>
-              <p className="text-white mb-6">
-                Relax and drive through stunning landscapes, right here in your UniSync dashboard.
-              </p>
-
-              <div className="w-full rounded-2xl overflow-hidden shadow-2xl border-4 border-purple-300">
-                
-                <iframe
-                  src="https://slowroads.io/"
-                  width="100%"
-                  height="600"
-                  allow="fullscreen"
-                  tabindex="-1"
-                  className="w-full"
-                ></iframe>
-              </div>
+            <div ref={gameRef} className={`mt-20 fade-in ${showGame?'show':''}`}>
+              {showGame && (
+                <>
+                  <h2 className="text-3xl font-bold text-white mb-3">Take a Break — Play Slow Roads 🚗</h2>
+                  <iframe src="https://slowroads.io/" className="w-full rounded-2xl shadow-2xl border-4 border-purple-400" height="600"></iframe>
+                </>
+              )}
             </div>
           </main>
         </div>
       );
-    };
+    }
 
-    ReactDOM.render(<UniSync />, document.getElementById("root"));
+    ReactDOM.render(<><DotGrid/><UniSync/></>, document.getElementById('root'));
   </script>
-  <script>
-  // Prevent iframe auto-focus scroll on load
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      window.scrollTo(0, 0);
-    }, 0); // small delay ensures iframe has loaded
-  });
-</script>
-
 </body>
 </html>
+
