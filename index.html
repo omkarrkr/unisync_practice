@@ -11,7 +11,7 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- GSAP + InertiaPlugin -->
+  <!-- GSAP -->
   <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
   <script src="https://assets.codepen.io/16327/InertiaPlugin.min.js"></script>
 
@@ -22,14 +22,15 @@
 
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
       margin: 0;
       padding: 0;
       background: #0F0F17;
       overflow-x: hidden;
     }
+
     .font-logo { font-family: 'Dancing Script', cursive; }
+
     .feature-card {
       background: rgba(255,255,255,0.12);
       backdrop-filter: blur(12px);
@@ -37,34 +38,54 @@
       transition: 0.25s;
       border: 1px solid rgba(255,255,255,0.06);
     }
-    .feature-card:hover { transform: translateY(-6px) scale(1.03); background: rgba(255,255,255,0.18); }
+
+    .feature-card:hover {
+      transform: translateY(-6px) scale(1.03);
+      background: rgba(255,255,255,0.18);
+    }
+
     .dot-grid { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
     .app-foreground { position: relative; z-index: 1; }
-    .fade-in { opacity: 0; transform: translateY(30px); transition: opacity 1s ease, transform 1s ease;}
-    .fade-in.show { opacity: 1; transform: translateY(0); }
   </style>
 </head>
+
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
+
+    const username = localStorage.getItem("username") || "Guest";
+
     const { useRef, useEffect, useCallback, useMemo } = React;
 
-    // safe plugin register
-    try { if (window.gsap && window.InertiaPlugin) gsap.registerPlugin(InertiaPlugin); } catch(e){ console.warn('GSAP plugin register failed', e); }
+    try { 
+      if (window.gsap && window.InertiaPlugin) gsap.registerPlugin(InertiaPlugin); 
+    } catch(e){ console.warn('GSAP plugin failed', e); }
 
-    // small throttle
-    const throttle = (fn, limit) => { let last=0; return (...a)=>{ const now=performance.now(); if(now-last>=limit){ last=now; fn(...a);} }; };
+    const throttle = (fn, ms) => {
+      let last = 0;
+      return (...args) => {
+        const now = Date.now();
+        if (now - last >= ms) { last = now; fn(...args); }
+      };
+    };
 
-    function hexToRgb(hex){ const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i); return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:0,g:0,b:0}; }
+    function hexToRgb(hex){
+      const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+      return m ? {r:parseInt(m[1],16), g:parseInt(m[2],16), b:parseInt(m[3],16)} : {r:0,g:0,b:0};
+    }
 
     function DotGrid({ dotSize=6, gap=10, baseColor="#7448FF", activeColor="#B38AFF", proximity=90 }){
       const wrap = useRef(), canvas = useRef(), dots = useRef([]);
-      const pointer = useRef({x:0,y:0,lastX:0,lastY:0,lastTime:0});
+      const pointer = useRef({x:0,y:0});
 
-      const base = useMemo(()=>hexToRgb(baseColor),[baseColor]);
-      const active = useMemo(()=>hexToRgb(activeColor),[activeColor]);
-      const circle = useMemo(()=>{ const p=new Path2D(); p.arc(0,0,dotSize/2,0,Math.PI*2); return p; },[dotSize]);
+      const base = useMemo(()=>hexToRgb(baseColor),[]);
+      const active = useMemo(()=>hexToRgb(activeColor),[]);
+      const circle = useMemo(()=>{
+        const p=new Path2D();
+        p.arc(0,0,dotSize/2,0,Math.PI*2);
+        return p;
+      },[]);
 
       const build = useCallback(()=>{
         const w = wrap.current.clientWidth, h = wrap.current.clientHeight;
@@ -72,83 +93,93 @@
         const c = canvas.current;
         c.width = w*dpr; c.height = h*dpr;
         c.style.width = w + 'px'; c.style.height = h + 'px';
-        const ctx = c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+        const ctx = c.getContext('2d');
+        ctx.setTransform(dpr,0,0,dpr,0,0);
 
         const cols = Math.floor((w + gap) / (dotSize + gap));
         const rows = Math.floor((h + gap) / (dotSize + gap));
         const cell = dotSize + gap;
+
         const sx = (w - (cell*cols - gap))/2 + dotSize/2;
         const sy = (h - (cell*rows - gap))/2 + dotSize/2;
 
-        dots.current = Array.from({length: rows*cols}, (_,i)=>{
-          const x = i%cols, y = (i/cols)|0;
-          return { cx: sx + x*cell, cy: sy + y*cell, xOffset:0, yOffset:0 };
-        });
-      },[dotSize,gap]);
-
-      useEffect(()=>{ build(); const ro = new ResizeObserver(build); if(wrap.current) ro.observe(wrap.current); return ()=>ro.disconnect();},[build]);
+        dots.current = [];
+        for(let y=0;y<rows;y++){
+          for(let x=0;x<cols;x++){
+            dots.current.push({
+              cx: sx + x*cell,
+              cy: sy + y*cell
+            });
+          }
+        }
+      },[]);
 
       useEffect(()=>{
-        let raf;
+        build();
+        const ro = new ResizeObserver(build);
+        ro.observe(wrap.current);
+        return ()=> ro.disconnect();
+      },[]);
+
+      useEffect(()=>{
+        let frame;
         const draw = ()=>{
           const c = canvas.current, ctx = c.getContext('2d');
           ctx.clearRect(0,0,c.width,c.height);
-          const { x:px, y:py } = pointer.current;
-          for(const d of dots.current){
-            const ox = d.cx + d.xOffset, oy = d.cy + d.yOffset;
-            const dx = d.cx - px, dy = d.cy - py, dist2 = dx*dx + dy*dy;
-            let col = baseColor;
-            if(dist2 <= proximity*proximity){
-              const t = 1 - Math.sqrt(dist2)/proximity;
-              col = `rgb(${base.r + (active.r-base.r)*t},${base.g + (active.g-base.g)*t},${base.b + (active.b-base.b)*t})`;
-            }
-            ctx.save(); ctx.translate(ox,oy); ctx.fillStyle = col; ctx.fill(circle); ctx.restore();
-          }
-          raf = requestAnimationFrame(draw);
-        };
-        draw(); return ()=>cancelAnimationFrame(raf);
-      },[proximity,base,active,circle]);
+          const px = pointer.current.x, py = pointer.current.y;
 
-      useEffect(()=>{
-        const rect = ()=> canvas.current.getBoundingClientRect();
-        const move = (e)=>{
-          const r = rect();
-          pointer.current.x = e.clientX - r.left;
-          pointer.current.y = e.clientY - r.top;
+          for (const d of dots.current) {
+            const dx = d.cx - px, dy = d.cy - py;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            let col = `rgb(${base.r},${base.g},${base.b})`;
+
+            if(dist < proximity){
+              const t = 1 - dist / proximity;
+              col = `rgb(${base.r + (active.r-base.r)*t},
+                           ${base.g + (active.g-base.g)*t},
+                           ${base.b + (active.b-base.b)*t})`;
+            }
+
+            ctx.save();
+            ctx.translate(d.cx, d.cy);
+            ctx.fillStyle = col;
+            ctx.fill(circle);
+            ctx.restore();
+          }
+
+          frame = requestAnimationFrame(draw);
         };
-        const m = throttle(move, 50);
-        window.addEventListener('mousemove', m, { passive: true });
-        return ()=> window.removeEventListener('mousemove', m);
+        draw();
+        return ()=> cancelAnimationFrame(frame);
       },[]);
 
-      return <section className="dot-grid" ref={wrap}><canvas ref={canvas} className="dot-grid__canvas" /></section>;
+      useEffect(()=>{
+        const move = throttle(e=>{
+          const r = canvas.current.getBoundingClientRect();
+          pointer.current.x = e.clientX - r.left;
+          pointer.current.y = e.clientY - r.top;
+        },50);
+
+        window.addEventListener("mousemove", move);
+        return ()=> window.removeEventListener("mousemove", move);
+      },[]);
+
+      return <section className="dot-grid" ref={wrap}><canvas ref={canvas}/></section>;
     }
 
-    // === UniSync App ===
     const FeatureCard = ({ id, label, icon, url, onClick }) => (
-      <a href={url} className="feature-card block p-6 rounded-2xl text-white" onClick={e=>{e.preventDefault(); onClick(id,url);}}>
+      <a href={url} className="feature-card block p-6 rounded-2xl text-white"
+         onClick={e=>{e.preventDefault(); onClick(id,url);}}>
         <div className="flex items-center space-x-4">
-          <div className="text-4xl p-3 bg-white/20 backdrop-blur-sm rounded-lg">{icon}</div>
+          <div className="text-4xl p-3 bg-white/20 rounded-lg">{icon}</div>
           <h2 className="text-xl font-semibold">{label}</h2>
         </div>
       </a>
     );
 
     function UniSync(){
-      const [showGame, setShowGame] = React.useState(false);
-      const gameRef = React.useRef(null);
-
-      React.useEffect(()=>{
-        const obs = new IntersectionObserver(entries=>{
-          entries.forEach(en=>{
-            if(en.isIntersecting){ setShowGame(true); obs.disconnect(); }
-          });
-        }, { threshold: 0.3 });
-        if(gameRef.current) obs.observe(gameRef.current);
-        return ()=> obs.disconnect();
-      },[]);
-
       const go = (id,url) => setTimeout(()=> location.href = url, 250);
+
       const features = [
         {id:'notes',label:'Notes Sharing',icon:'📝',url:'notes.html'},
         {id:'groups',label:'Study Groups',icon:'👥',url:'groups.html'},
@@ -161,40 +192,38 @@
 
       return (
         <div className="app-foreground min-h-screen bg-black/40 backdrop-blur-sm">
+          
           <header className="backdrop-blur-lg bg-gradient-to-r from-gray-900/70 via-gray-800/50 to-gray-900/70 border-b border-white/10 sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-6 flex justify-between items-center h-20">
-              <a className="flex items-center gap-3" href="#">
-                <img src="./u_logo-removebg-preview.png" alt="UniSync Logo" className="w-14 h-14 object-contain rounded-2xl shadow-lg p-1 bg-white" />
-
+              
+              <div className="flex items-center gap-3">
+                <img src="./u_logo-removebg-preview.png"
+                     className="w-14 h-14 object-contain rounded-2xl shadow-lg p-1 bg-white"/>
                 <h1 className="text-5xl font-logo text-white drop-shadow-lg">UniSync</h1>
-              </a>
-              <div className="flex gap-3"><span className="text-2xl">🔔</span><div className="w-10 h-10 bg-gray-200 rounded-full flex justify-center items-center">P</div></div>
+              </div>
+
+              <div className="flex gap-3 text-white text-xl font-semibold">
+                👋 {username}
+              </div>
+
             </div>
           </header>
 
           <main className="py-16 px-6 max-w-7xl mx-auto text-center">
             <h1 className="text-5xl font-bold text-white mb-4">Your Effortless University Experience</h1>
-            <p className="text-lg text-gray-200 mb-10">Hello Piyush 👋 — dive into your campus digital hub.</p>
+            <p className="text-lg text-gray-200 mb-10">Hello {username} let's dive into your campus digital hub.</p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {features.map(f => <FeatureCard key={f.id} {...f} onClick={go} />)}
+              {features.map(f => <FeatureCard key={f.id} {...f} onClick={go}/>)}
             </div>
 
-            <div ref={gameRef} className={`mt-20 fade-in ${showGame?'show':''}`}>
-              {showGame && (
-                <>
-                  <h2 className="text-3xl font-bold text-white mb-3">Take a Break — Play Slow Roads 🚗</h2>
-                  <iframe src="https://slowroads.io/" className="w-full rounded-2xl shadow-2xl border-4 border-purple-400" height="600"></iframe>
-                </>
-              )}
-            </div>
           </main>
         </div>
       );
     }
 
-    ReactDOM.render(<><DotGrid/><UniSync/></>, document.getElementById('root'));
+    ReactDOM.render(<><DotGrid/><UniSync/></>, document.getElementById("root"));
+
   </script>
 </body>
 </html>
-

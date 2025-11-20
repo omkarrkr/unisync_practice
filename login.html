@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Unisync — Login</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --accent1: #FF8A00;
+    --accent2: #FFC857;
+    --text: #ffffff;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:"Poppins", sans-serif;
+    background:
+      radial-gradient(1200px 600px at 10% 20%, rgba(255,202,80,0.10), transparent 10%),
+      radial-gradient(900px 500px at 90% 80%, rgba(255,138,0,0.08), transparent 10%),
+      linear-gradient(180deg, #0f172a 0%, #07102a 100%);
+    color:var(--text);
+    overflow:hidden;
+  }
+
+  .login-card{
+    position:relative;
+    z-index:5;
+    width:360px;
+    padding:32px;
+    border-radius:16px;
+    background: rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.10);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    text-align:center;
+  }
+  input{
+    width:100%;
+    padding:12px;
+    border-radius:10px;
+    border:none;
+    margin:8px 0;
+    background: rgba(255,255,255,0.12);
+    color:#fff;
+  }
+
+  .btn{
+    width:100%;
+    padding:12px;
+    margin-top:12px;
+    border:none;
+    border-radius:10px;
+    font-size:16px;
+    font-weight:700;
+    cursor:pointer;
+    background: linear-gradient(90deg, var(--accent1), var(--accent2));
+    box-shadow: 0 12px 26px rgba(255,138,0,0.25);
+  }
+
+  .msg{ margin-top:10px; min-height:20px; }
+</style>
+</head>
+
+<body>
+
+<div class="login-card">
+  <img src="u_logo-removebg-preview.png" class="logo" width="90">
+
+  <h1>Welcome to Unisync</h1>
+
+  <input id="email" type="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password">
+
+  <button class="btn" onclick="login()">Sign In</button>
+
+  <p id="msg" class="msg"></p>
+
+  <p>Don't have an account? <a href="register.html" style="color:#FFC857;">Register</a></p>
+</div>
+
+<script>
+async function login(){
+  const msg = document.getElementById("msg");
+
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+
+  if(!email || !password){
+    msg.textContent = "Please fill all fields";
+    return;
+  }
+
+  msg.textContent = "Checking...";
+
+  try{
+    const res = await fetch("http://localhost:5000/api/auth/login", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+
+    if(!res.ok){
+      msg.textContent = data.msg || "Login failed";
+      return;
+    }
+
+    // SAVE FIXED LOGIN DATA
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    localStorage.setItem("username", data.user.name);
+
+    msg.style.color = "#90ff90";
+    msg.textContent = "Login success! Redirecting...";
+
+    setTimeout(()=>{
+      window.location.href = "index.html";
+    }, 800);
+
+  }catch(err){
+    msg.textContent = "Server error";
+  }
+}
+</script>
+
+</body>
+</html>
